@@ -24,21 +24,22 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800)
 void setup() {
   // initialize digital pin 13 as an output.
   Serial.begin(115200);
+  delay(500);
 
    strip.begin(); // This initializes the NeoPixel library.
    strip.show();
    //20 K to get a decently average reading
-   for(int i = 0; i<20000; i++) {
+   for(int i = 0; i<50000; i++) {
     baseLine += (analogRead(A0) * 10);
     }
-    baseLine = baseLine / 20000;
+    baseLine = baseLine / 50000;
     Serial.println(baseLine);
   
 }
  
 // the loop function runs over and over again forever
 void loop() {
-rainbowCycle(5);
+rainbowCycle(50);
 
 
 }
@@ -63,8 +64,20 @@ byte*  applyAmplification(byte* input, byte amplification){
    return input;
   }
 
+
+
+int readMicrophone(int readings){
+  int sum = 0;
+  for (int i=0; i<readings; i++){
+    //my artificial amplification, can be tweaked later
+    sum += (analogRead(A0) * 10);
+    }
+    sum = sum / readings;
+    return sum;
+ }
 byte getAmplitude(){
-  int difference  = readMicrophone(20) - baseLine;
+  int difference  = readMicrophone(30) - baseLine;
+  Serial.println(difference);
   if(difference < 0){
     difference = difference * -1;
     }
@@ -77,17 +90,26 @@ byte getAmplitude(){
       }
 }
 
-int readMicrophone(int readings){
-  int sum = 0;
-  for (int i=0; i<readings; i++){
-    //my artificial amplification, can be tweaked later
-    sum += (analogRead(A0) * 10);
-    }
-    sum = sum / readings;
-    return sum;
-  }
-
 // neopixel functions BELOW
+
+void Strobe(byte red, byte green, byte blue, int StrobeCount, int FlashDelay, int EndPause){
+  //the strobe needs some work, makes it look like it isn't working
+  byte amplitude = getAmplitude();
+  red = red * amplitude / 255;
+  blue = blue * amplitude / 255;
+  green = green * amplitude / 255;
+  for(int j = 0; j < StrobeCount; j++) {
+    setAll(red,green,blue);
+    showStrip();
+    delay(FlashDelay);
+    setAll(0,0,0);
+    showStrip();
+    delay(FlashDelay);
+  }
+ 
+ delay(EndPause);
+}
+
 
 void rainbowCycle(int SpeedDelay) {
   byte *c;
