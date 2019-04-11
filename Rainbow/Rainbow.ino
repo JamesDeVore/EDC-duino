@@ -1,4 +1,4 @@
-
+#include <Adafruit_DotStar.h>
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
   #include <avr/power.h>
@@ -6,41 +6,90 @@
 
 // Which pin on the Arduino is connected to the NeoPixels?
 // On a Trinket or Gemma we suggest changing this to 1
-#define PIN            0
+#define PIN            1
 
 // How many NeoPixels are attached to the Arduino?
-#define NUM_LEDS     1
+#define NUM_LEDS     2
 //to set a baseline volume, so I dont hard code in the wrong value
 int baseLine = 0;
 int amplitude = 20;
+int adjustedBaseline = 0;
 
+const int sensorPin = A4;    // pin that the sensor is attached to
+
+int sensorValue = 0;         // the sensor value
+int sensorMin = 1023;        // minimum sensor value
+int sensorMax = 0;           // maximum sensor value
+int calibrationCheckArray[50]; //array to keep track of readings to check for auto calibration
+byte arrayPointer = 0;
+int prevRead = 0; //to dynamically find differences
 // When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
 // Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
 // example for more information on possible values.
+
+const int buttonPin = 0;     // the number of the pushbutton pin
+ int buttonState = 0;         // variable for reading the pushbutton status
+
+
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_DotStar onBoard = Adafruit_DotStar(1, INTERNAL_DS_DATA, INTERNAL_DS_CLK, DOTSTAR_BGR);
 
  int readings =50;
 // the setup function runs once when you press reset or power the board
-void setup() {
-  // initialize digital pin 13 as an output.
-  Serial.begin(115200);
-  delay(500);
+unsigned long previousMillis = 0;        // will store last time LED was updated
 
+// constants won't change:
+const long interval = 2500;           // interval at which to blink (milliseconds)
+int mode = 0;
+void setup() {
+   pinMode(buttonPin, INPUT);
    strip.begin(); // This initializes the NeoPixel library.
+   onBoard.begin();
+   onBoard.show();
    strip.show();
-   //20 K to get a decently average reading
-   for(int i = 0; i<50000; i++) {
-    baseLine += (analogRead(A0) * 10);
-    }
-    baseLine = baseLine / 50000;
-    Serial.println(baseLine);
-  
+   setAll(255,0,0);
+   delay(1000);
+  arduinoCalibration();
+  delay(3000);
+  setAll(0,0,0);
+ 
+
 }
  
 // the loop function runs over and over again forever
 void loop() {
-rainbowCycle(50);
 
+  
+  /*
+   if(millis() - previousMillis >= interval){
+    previousMillis = millis();
+  if(mode == 0){
+    mode = 1;
+    } else{
+      mode = 0;
+      }
+  }
+    
+  if(mode == 1){
+    showOneColor(255,0,0);
+    }
+   if(mode == 0){
+    showOneColor(0,0,255);
+    }
+
+*/
+
+//Mikey
+//showOneColor(255,0,0);
+
+buttonState = digitalRead(buttonPin);
+  if (buttonState == LOW) {
+    // turn LED on:
+    setAll(0,250,0);
+  } else {
+    // turn LED off:
+    rainbowCycle(10);
+  }
 
 }
 
@@ -50,7 +99,7 @@ byte*  applyAmplification(byte* input, byte amplification){
   //microphone readings after the noise has been cancelled
 
   byte byteAmp = amplification;
-  Serial.println(byteAmp);
+  //Serial.println(byteAmp);
   for(int i=0; i < 3; i++){
     int temp = int(input[i]);
     //255 is the max value, I can turn this down if it filters it too much
@@ -65,24 +114,80 @@ byte*  applyAmplification(byte* input, byte amplification){
   }
 
 
+int newRead(int readings){
+  //analogWrite(sensorPin,1);
+  // sensorValue = analogRead(sensorPin);
 
-int readMicrophone(int readings){
   int sum = 0;
   for (int i=0; i<readings; i++){
     //my artificial amplification, can be tweaked later
-    sum += (analogRead(A0) * 10);
+    sum += readPin(1);
     }
     sum = sum / readings;
-    return sum;
- }
+    //Serial.println(sum);
+
+  // apply the calibration to the sensor reading
+  //sensorValue = map(sensorValue, sensorMin, sensorMax, 0, 255);
+
+  // in case the sensor value is outside the range seen during calibration
+  //sensorValue = constrain(sensorValue, 0, 255);
+
+  //Serial.println(sum);
+  return sum;
+  }
+
+byte newAmplitude(){
+  Serial.println(newRead(100));
+
+ 
+  float difference = (newRead(100) - baseLine);
+   if(difference < 0){
+    difference = difference * -1;
+    }
+  /*calibrationCheckArray[arrayPointer] = difference;
+  arrayPointer++;
+  if(arrayPointer == 50){
+    arrayPointer = 0;
+    }
+    
+    
+   
+    int calSum = 0;
+   for (int i = 0; i< 50; i++){
+    calSum += calibrationCheckArray[i];
+    }
+    calSum = calSum / 50;
+    //Serial.println(calSum); 
+    if(calSum > 30){
+      memset(calibrationCheckArray, 0, sizeof(calibrationCheckArray));
+      //setup();
+      }
+      */
+  //Serial.println(difference);     
+     
+ if(prevRead - difference > 0){
+  prevRead = difference;
+    return byte(map(difference,10,50,10,255));    
+    }
+    else {
+      prevRead = difference;
+      return 10;
+      }
+  }
+ 
 byte getAmplitude(){
-  int difference  = readMicrophone(30) - baseLine;
-  Serial.println(difference);
+  int difference  = newRead(50) - baseLine;
+  //Serial.println(difference);
   if(difference < 0){
     difference = difference * -1;
     }
   //noise filtering
-  if(difference > 5){
+  
+  if(difference > 300 && difference < 600){
+    difference = 0;
+    }
+  
+  if(difference > 10){
     return byte(map(difference,6,50,10,255));    
     }
     else {
@@ -92,23 +197,23 @@ byte getAmplitude(){
 
 // neopixel functions BELOW
 
-void Strobe(byte red, byte green, byte blue, int StrobeCount, int FlashDelay, int EndPause){
-  //the strobe needs some work, makes it look like it isn't working
-  byte amplitude = getAmplitude();
-  red = red * amplitude / 255;
-  blue = blue * amplitude / 255;
-  green = green * amplitude / 255;
-  for(int j = 0; j < StrobeCount; j++) {
-    setAll(red,green,blue);
-    showStrip();
-    delay(FlashDelay);
-    setAll(0,0,0);
-    showStrip();
-    delay(FlashDelay);
+void showOneColor(byte red, byte green, byte blue){
+  float factor = float(newAmplitude()) / 255;
+  //Serial.println(factor);
+  float newRed = byte(float(red) * factor);
+  float newGreen = byte(float(green) * factor);
+  float newBlue = byte(float(blue) * factor);
+  if(newRed < 20){
+    newRed = 0;
+    }
+    if(newBlue < 20){
+    newBlue = 0;
+    }
+    if(newGreen < 20){
+    newGreen = 0;
+    }
+  setAll(newRed,newGreen,newBlue);
   }
- 
- delay(EndPause);
-}
 
 
 void rainbowCycle(int SpeedDelay) {
@@ -121,8 +226,9 @@ void rainbowCycle(int SpeedDelay) {
    
     for(i=0; i< NUM_LEDS; i++) {
       c=Wheel(((i * 256 / NUM_LEDS) + j) & 255);
-     c = applyAmplification(c, getAmplitude());
+     c = applyAmplification(c, newAmplitude());
       setPixel(i, (*c), (*(c+1)), (*(c+2)));
+      delay(10);
     }
     showStrip();
     delay(SpeedDelay);
@@ -133,6 +239,7 @@ void showStrip() {
  #ifdef ADAFRUIT_NEOPIXEL_H 
    // NeoPixel
    strip.show();
+   onBoard.show();
  #endif
  #ifndef ADAFRUIT_NEOPIXEL_H
    // FastLED
@@ -144,6 +251,7 @@ void setPixel(int Pixel, byte red, byte green, byte blue) {
  #ifdef ADAFRUIT_NEOPIXEL_H 
    // NeoPixel
    strip.setPixelColor(Pixel, strip.Color(red, green, blue));
+   onBoard.setPixelColor(Pixel, strip.Color(red, green, blue));
  #endif
  #ifndef ADAFRUIT_NEOPIXEL_H 
    // FastLED
@@ -180,4 +288,35 @@ byte * Wheel(byte WheelPos) {
   }
   return c;
 }
+// Calibration options 
+void arduinoCalibration() {
 
+    Serial.begin(115200);
+  unsigned long now = millis();
+  unsigned long readingCount = 0;
+  // calibrate during the first five seconds
+  while (now + 5000 > millis()) {
+    sensorValue = readPin(1);
+    baseLine += sensorValue;
+    readingCount++;
+    //Serial.println(sensorValue);
+    // record the maximum sensor value
+    if (sensorValue > sensorMax) {
+      sensorMax = sensorValue;
+    }
+
+    // record the minimum sensor value
+    if (sensorValue < sensorMin) {
+      sensorMin = sensorValue;
+    }
+  }
+  baseLine = baseLine / readingCount;
+  // signal the end of the calibration period
+ 
+  Serial.println(sensorMin);
+  Serial.println(sensorMax);
+  Serial.println(baseLine);
+  }
+int readPin(int multiplier){
+  return analogRead(sensorPin) * multiplier;
+  }
